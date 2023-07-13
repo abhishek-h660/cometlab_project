@@ -2,8 +2,10 @@ const express = require('express')
 var jwt = require("jsonwebtoken");
 var bcrypt = require("bcryptjs");
 var cors = require('cors')
+const axios = require('axios').default
 const app = express()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const request = require('request');
 const port = 8080;
 require('dotenv').config()
 app.use(express.json());
@@ -57,6 +59,14 @@ function collectionUsers() {
 function collectionProblems() {
     try{
         return database.collection("problems");
+    }catch(e){
+        console.log("error", e)
+    }
+}
+
+function collectionTestCases() {
+    try{
+        return database.collection("test-cases");
     }catch(e){
         console.log("error", e)
     }
@@ -154,7 +164,7 @@ function signin(user, res) {
     }finally{}
 }
 
-//add problems for admins
+//add problems -- for admins
 function addProblem(problem, res) {
     try{
         
@@ -165,6 +175,18 @@ function addProblem(problem, res) {
     }finally{}
 }
 
+//add to test cases-- for admins
+function addTestCases(testCase, res) {
+    try{
+        
+        collectionTestCases().insertOne(testCase).then(addResult => {
+            res.send(addResult)
+        })
+        
+    }finally{}
+}
+
+//edit problem -- for admins
 function editProblem(problem, res) {
     try{
         
@@ -175,7 +197,7 @@ function editProblem(problem, res) {
     }finally{}
 }
 
-//add problems for admins
+//add problems -- for admins
 function deleteProblem(problem_id, res) {
     try{
         const id = ObjectId.createFromHexString(problem_id)
@@ -183,6 +205,32 @@ function deleteProblem(problem_id, res) {
             res.send(deleteResult)
         })
     }finally{}
+}
+
+//fetch the problems with pagination
+async function listProblems(p, res) {
+    const page = parseInt(p)
+    const skip = 5*(page-1)
+    const limit = 5
+    try{
+        const cursor = await collectionProblems().aggregate([{"$skip": skip}, {"$limit": limit}])
+        const result = await cursor.toArray()
+        res.send(result)
+    }finally{}
+}
+
+
+function checkSoution(req_body, res) {
+    const url= `${process.env.PROBLEM_API_URI}/submissions?access_token=${process.env.ACCESS_TOKEN_PROBLEM}`
+    request.post(url, req_body, (error, response, body) => {
+        if (error) console.log(error)
+     
+        // Printing status code
+        console.log(response.statusCode);
+     
+        // Printing body
+        res.send(body)
+    });
 }
 
 //middleware
@@ -193,6 +241,7 @@ function middleware(token) {
 
 
 //serving routes
+
 app.post('/api/v1/signup', (req, res) => {
     const user = req.body
     signup(user, res)
@@ -216,6 +265,11 @@ app.post('/api/v1/addProblem', (req, res) => {
         const problem = req.body
     addProblem(problem, res)
     }
+})
+
+app.get('/api/v1/listProblems/:page', (req, res) => {
+    const page = req.params.page
+    listProblems(page, res)
 })
 
 app.patch('/api/v1/editProblem', (req, res) => {
@@ -248,6 +302,11 @@ app.delete('/api/v1/deleteProblem/:id', (req, res) => {
         deleteProblem(problem_id, res)
     }
    
+})
+
+app.post('/api/v1/submitCode', (req, res) => {
+    const req_body = req.body
+    checkSoution(req_body, res)
 })
 
 app.listen(port, ()=>{
